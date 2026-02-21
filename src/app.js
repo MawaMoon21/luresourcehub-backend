@@ -1,43 +1,41 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const path = require('path');
 const dotenv = require('dotenv');
 
-// Route files
-const auth = require('./routes/authRoutes');
-
-// Load env vars
 dotenv.config();
+
+// Import routes
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 const app = express();
 
-// Body parser
-app.use(express.json());
-
-// Enable CORS
+// Middleware
+app.use(helmet());
 app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
     credentials: true
 }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(morgan('dev'));
 
-// Mount routers
-app.use('/api/auth', auth);
+// Static files
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Welcome route
-app.get('/', (req, res) => {
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+
+// Health check
+app.get('/api/health', (req, res) => {
     res.json({
-        message: 'Welcome to LUResourceHub API',
-        version: '1.0.0',
-        endpoints: {
-            auth: '/api/auth'
-        }
-    });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-    res.status(404).json({
-        success: false,
-        message: 'Route not found'
+        success: true,
+        message: 'Server is running',
+        timestamp: new Date().toISOString()
     });
 });
 
@@ -46,8 +44,16 @@ app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).json({
         success: false,
-        message: 'Internal server error',
-        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+        message: 'Something went wrong!',
+        error: process.env.NODE_ENV === 'development' ? err.message : {}
+    });
+});
+
+// 404 handler
+app.use('*', (req, res) => {
+    res.status(404).json({
+        success: false,
+        message: 'Route not found'
     });
 });
 
