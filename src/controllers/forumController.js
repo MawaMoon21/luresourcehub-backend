@@ -155,6 +155,17 @@ exports.votePost = async (req, res) => {
       else {
         post.upvotes.push(uid);
         if (downIdx > -1) post.downvotes.splice(downIdx, 1);
+        // Notify post author of the upvote (skip self-upvote)
+        if (post.author && !post.author.equals(uid)) {
+          Notification.createNotification({
+            recipient: post.author,
+            actor: uid,
+            type: 'forum_upvote',
+            title: 'Post Upvoted',
+            message: `Someone upvoted your post "${post.title}"`,
+            relatedPost: post._id,
+          }).catch(() => {});
+        }
       }
     } else {
       if (downIdx > -1) post.downvotes.splice(downIdx, 1);

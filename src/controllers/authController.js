@@ -25,7 +25,7 @@ const buildUserResponse = (user) => {
 exports.register = async (req, res) => {
   try {
     const { error } = registerValidation(req.body);
-    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    if (error) return res.status(400).json({ success: false, message: error.details.map(d => d.message).join('; ') });
 
     const exists = await User.findOne({ email: req.body.email });
     if (exists) return res.status(400).json({ success: false, message: 'Email already registered' });
@@ -181,6 +181,19 @@ exports.verifyOtp = async (req, res) => {
 
     // Send welcome email (non-blocking)
     emailService.sendWelcomeEmail(user).catch(() => {});
+
+    // Faculty with pending approval must not receive a token — they still need
+    // admin sign-off before they can log in. Issuing a token here would let them
+    // bypass the login-gate approval check via direct API calls.
+    if (user.role === 'faculty' && user.approvalStatus === 'pending') {
+      return res.json({
+        success: true,
+        message: 'Email verified successfully! Your faculty account is pending administrator approval. You will be notified once it is approved.',
+        requiresApproval: true,
+        role: user.role,
+        approvalStatus: user.approvalStatus,
+      });
+    }
 
     const token = generateToken(user._id, user.role);
     res.json({ success: true, message: 'Email verified successfully! You can now log in.', token, user: buildUserResponse(user) });

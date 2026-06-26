@@ -251,6 +251,18 @@ exports.downloadResource = async (req, res) => {
     await Resource.findByIdAndUpdate(req.params.id, { $inc: { downloadsCount: 1 } });
     await User.findByIdAndUpdate(req.user._id, { $inc: { totalDownloads: 1 } });
 
+    // Notify the uploader (skip self-downloads)
+    if (resource.uploadedBy && !resource.uploadedBy.equals(req.user._id)) {
+      Notification.createNotification({
+        recipient: resource.uploadedBy,
+        actor: req.user._id,
+        type: 'resource_downloaded',
+        title: 'Resource Downloaded',
+        message: `Someone downloaded your resource "${resource.title}"`,
+        relatedResource: resource._id,
+      }).catch(() => {});
+    }
+
     const filePath = path.join(__dirname, '../../', resource.fileUrl);
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ success: false, message: 'File not found on server' });

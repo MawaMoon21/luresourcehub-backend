@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const emailService = require('../utils/emailService');
 
 // Shape a user document for admin responses (never leak password/tokens)
@@ -140,6 +141,16 @@ exports.setApproval = async (req, res) => {
     emailService.sendFacultyApprovalEmail(user, status).catch(err =>
       console.error('Faculty approval email failed:', err.message)
     );
+
+    Notification.createNotification({
+      recipient: user._id,
+      actor: req.user._id,
+      type: 'faculty_verified',
+      title: status === 'approved' ? 'Account Approved' : 'Account Rejected',
+      message: status === 'approved'
+        ? 'Your faculty account has been approved. You can now log in.'
+        : 'Your faculty account application was rejected.',
+    }).catch(() => {});
 
     res.json({ success: true, message: `Faculty account ${status}`, data: buildUserRecord(user) });
   } catch (err) {
