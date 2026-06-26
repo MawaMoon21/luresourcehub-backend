@@ -102,11 +102,27 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
-    
+    // Faculty self-registrations start as 'pending' and cannot log in until an
+    // admin approves them. Students and admins are 'approved' by default.
+    approvalStatus: {
+        type: String,
+        enum: {
+            values: ['pending', 'approved', 'rejected'],
+            message: 'Approval status must be pending, approved, or rejected'
+        },
+        default: 'approved'
+    },
+
     // Verification and Security Tokens
+    // verificationToken stores the SHA-256 hash of the 6-digit OTP (never the raw code)
     verificationToken: String,
     verificationTokenExpires: Date,
-    
+    // Failed OTP attempts for the current code (brute-force guard)
+    verificationAttempts: {
+        type: Number,
+        default: 0
+    },
+
     resetPasswordToken: String,
     resetPasswordExpire: Date,
     
@@ -208,18 +224,21 @@ userSchema.methods.matchPassword = async function(enteredPassword) {
     }
 };
 
-// Generate email verification token
-userSchema.methods.generateVerificationToken = function() {
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    
+// Generate a 6-digit email verification OTP.
+// Only the SHA-256 hash is stored; the raw code is returned to be emailed.
+userSchema.methods.generateOtp = function() {
+    // 100000–999999 — always six digits, no leading-zero ambiguity
+    const otp = String(crypto.randomInt(100000, 1000000));
+
     this.verificationToken = crypto
         .createHash('sha256')
-        .update(verificationToken)
+        .update(otp)
         .digest('hex');
-    
-    this.verificationTokenExpires = Date.now() + 24 * 60 * 60 * 1000;
-    
-    return verificationToken;
+
+    this.verificationTokenExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    this.verificationAttempts = 0;
+
+    return otp;
 };
 
 // Generate password reset token
@@ -231,17 +250,18 @@ userSchema.methods.generatePasswordResetToken = function() {
         .update(resetToken)
         .digest('hex');
     
-    this.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
+    this.resetPasswordExpire = Date.now() + 60 * 60 * 1000; // 1 hour
     
     return resetToken;
 };
 
-// Verify email
+// Verify email — clears the OTP and attempt counter
 userSchema.methods.verifyEmail = function() {
     this.isVerified = true;
     this.verificationToken = undefined;
     this.verificationTokenExpires = undefined;
-    
+    this.verificationAttempts = 0;
+
     return this;
 };
 
@@ -290,6 +310,7 @@ userSchema.statics.emailExists = async function(email) {
 // Compound indexes for better query performance
 userSchema.index({ email: 1, isActive: 1 });
 userSchema.index({ role: 1, isActive: 1 });
+userSchema.index({ role: 1, approvalStatus: 1 });
 userSchema.index({ department: 1, semester: 1 });
 userSchema.index({ studentId: 1 }, { sparse: true });
 userSchema.index({ facultyId: 1 }, { sparse: true });

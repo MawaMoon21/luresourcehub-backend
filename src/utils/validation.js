@@ -21,9 +21,11 @@ const registerValidation = (data) => {
                 'string.min': 'Password must be at least 6 characters',
                 'string.max': 'Password cannot exceed 1024 characters'
             }),
-        role: Joi.string().valid('student', 'faculty', 'admin').required()
+        // Public registration may only request 'student' or 'faculty'.
+        // 'admin' is never self-assignable; faculty accounts require admin approval.
+        role: Joi.string().valid('student', 'faculty').required()
             .messages({
-                'any.only': 'Role must be one of: student, faculty, admin',
+                'any.only': 'Role must be either student or faculty',
                 'string.empty': 'Role is required'
             }),
         department: Joi.string().valid('CSE', 'EEE', 'BBA', 'MBA', 'LAW', 'ENG', 'PHARMACY').required()
